@@ -239,6 +239,7 @@ const onIncomingMessage = (incoming: RPCChatTypes.IncomingMessage, state: TypedS
   if (convID && cMsg) {
     const conversationIDKey = Types.conversationIDToKey(convID)
     const message = Constants.uiMessageToMessage(
+      state,
       conversationIDKey,
       cMsg,
       state.config.username || '',
@@ -390,7 +391,7 @@ const onErrorMessage = (outboxRecords: Array<RPCChatTypes.OutboxRecord>) => {
     const s = outboxRecord.state
     if (s.state === RPCChatTypes.localOutboxStateType.error) {
       const error = s.error
-      if (error && error.typ) {
+      if (error) {
         // This is temp until fixed by CORE-7112. We get this error but not the call to let us show the red banner
         const reason = Constants.rpcErrorToString(error)
         let tempForceRedBox
@@ -678,6 +679,32 @@ const setupChatHandlers = () => {
     ({updates}: RPCChatTypes.NotifyChatChatThreadsStaleRpcParam) => onChatThreadStale(updates)
   )
 
+  engine().setIncomingActionCreators(
+    'chat.1.NotifyChat.ChatAttachmentUploadProgress',
+    ({convID, outboxID, bytesComplete, bytesTotal}) => {
+      const conversationIDKey = Types.conversationIDToKey(convID)
+      const ratio = bytesComplete / bytesTotal
+      return [
+        Chat2Gen.createAttachmentUploading({
+          conversationIDKey,
+          outboxID: Types.rpcOutboxIDToOutboxID(outboxID),
+          ratio,
+        }),
+      ]
+    }
+  )
+
+  engine().setIncomingActionCreators('chat.1.NotifyChat.ChatAttachmentUploadStart', ({convID, outboxID}) => {
+    const conversationIDKey = Types.conversationIDToKey(convID)
+    return [
+      Chat2Gen.createAttachmentUploading({
+        conversationIDKey,
+        outboxID: Types.rpcOutboxIDToOutboxID(outboxID),
+        ratio: 0.01,
+      }),
+    ]
+  })
+
   engine().setIncomingActionCreators('chat.1.NotifyChat.ChatJoinedConversation', () => [
     Chat2Gen.createInboxRefresh({reason: 'joinedAConversation'}),
   ])
@@ -867,6 +894,7 @@ const loadMoreMessages = (
     const messages = (uiMessages.messages || []).reduce((arr, m) => {
       const message = conversationIDKey
         ? Constants.uiMessageToMessage(
+            state,
             conversationIDKey,
             m,
             state.config.username || '',
@@ -1572,12 +1600,14 @@ function* attachmentsUpload(action: Chat2Gen.AttachmentsUploadPayload) {
       Saga.call(
         RPCChatTypes.localMakePreviewRpcPromise,
         ({
-          attachment: {filename},
+          filename,
           outboxID: outboxIDs[i],
         }: RPCChatTypes.LocalMakePreviewRpcParam)
       )
     )
   )
+
+  // Collect preview information
   const previewURLs = previews.map(
     preview =>
       preview &&
@@ -1587,12 +1617,14 @@ function* attachmentsUpload(action: Chat2Gen.AttachmentsUploadPayload) {
         ? preview.location.url
         : ''
   )
+  const previewSpecs = previews.map(preview => Constants.previewSpecs(preview && preview.metadata, null))
 
   const meta = state.chat2.metaMap.get(conversationIDKey)
   if (!meta) {
     logger.warn('Missing meta for attachment upload', conversationIDKey)
     return
   }
+  const errorReasons = outboxIDs.map(o => '')
 
   // disable sending exploding messages if flag is false
   const ephemeralLifetime = flags.explodingMessagesEnabled
@@ -1600,14 +1632,15 @@ function* attachmentsUpload(action: Chat2Gen.AttachmentsUploadPayload) {
     : 0
   const ephemeralData = ephemeralLifetime !== 0 ? {ephemeralLifetime} : {}
 
-  const attachmentTypes = paths.map(path => Constants.pathToAttachmentType(path))
   const messages = Constants.makePendingAttachmentMessages(
     state,
     conversationIDKey,
-    attachmentTypes,
     titles,
     previewURLs,
-    outboxIDs.map(outboxID => Types.stringToOutboxID(outboxID.toString('hex') || '')), // never null but makes flow happy
+    previewSpecs,
+    outboxIDs.map(o => Types.rpcOutboxIDToOutboxID(o)),
+    [],
+    errorReasons,
     ephemeralLifetime
   )
   const ordinals = messages.map(m => m.ordinal)
@@ -1618,12 +1651,6 @@ function* attachmentsUpload(action: Chat2Gen.AttachmentsUploadPayload) {
       messages,
     })
   )
-  yield Saga.sequentially(
-    ordinals.map(ordinal =>
-      Saga.put(Chat2Gen.createAttachmentUploading({conversationIDKey, ordinal, ratio: 0.01}))
-    )
-  )
-
   yield Saga.sequentially(
     paths.map((path, i) =>
       Saga.call(attachmentUploadCall, {
@@ -1657,46 +1684,21 @@ function* attachmentUploadCall({
   ephemeralData: {ephemeralLifetime?: number},
 }) {
   const state = yield Saga.select()
-  try {
-    let lastRatioSent = -1 // force the first update to show no matter what
-    yield RPCChatTypes.localPostFileAttachmentLocalRpcSaga({
-      incomingCallMap: {
-        'chat.1.chatUi.chatAttachmentPreviewUploadDone': () => {},
-        'chat.1.chatUi.chatAttachmentPreviewUploadStart': metadata =>
-          Saga.put(Chat2Gen.createAttachmentUploading({conversationIDKey, ordinal, ratio: 0})),
-        'chat.1.chatUi.chatAttachmentUploadDone': () => {},
-        'chat.1.chatUi.chatAttachmentUploadOutboxID': () => {},
-        'chat.1.chatUi.chatAttachmentUploadProgress': ({bytesComplete, bytesTotal}) => {
-          const ratio = bytesComplete / bytesTotal
-          // Don't spam ourselves with updates
-          if (ordinal && ratio - lastRatioSent > 0.05) {
-            lastRatioSent = ratio
-            return Saga.put(Chat2Gen.createAttachmentUploading({conversationIDKey, ordinal, ratio}))
-          }
-        },
-        'chat.1.chatUi.chatAttachmentUploadStart': metadata =>
-          Saga.put(Chat2Gen.createAttachmentUploading({conversationIDKey, ordinal, ratio: 0})),
-      },
-      params: {
-        ...ephemeralData,
-        attachment: {filename: path},
-        conversationID: Types.keyToConversationID(conversationIDKey),
-        identifyBehavior: getIdentifyBehavior(state, conversationIDKey),
-        metadata: Buffer.from([]),
-        outboxID,
-        title,
-        tlfName,
-        visibility: RPCTypes.commonTLFVisibility.private,
-      },
-    })
-
-    if (ordinal) {
-      yield Saga.put(Chat2Gen.createAttachmentUploaded({conversationIDKey, ordinal}))
-    }
-  } catch (e) {
-    // TODO better error
-    logger.warn(`Upload Attachment Failed: ${e.message}`)
-  }
+  const clientPrev = Constants.getClientPrev(state, conversationIDKey)
+  yield Saga.call(RPCChatTypes.localPostFileAttachmentLocalNonblockRpcPromise, {
+    arg: {
+      ...ephemeralData,
+      filename: path,
+      conversationID: Types.keyToConversationID(conversationIDKey),
+      identifyBehavior: getIdentifyBehavior(state, conversationIDKey),
+      metadata: Buffer.from([]),
+      outboxID,
+      title,
+      tlfName,
+      visibility: RPCTypes.commonTLFVisibility.private,
+    },
+    clientPrev,
+  })
 }
 
 // Tell service we're typing

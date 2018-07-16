@@ -691,7 +691,8 @@
         "DUPLICATE_4",
         "EXPIRED_5",
         "TOOMANYATTEMPTS_6",
-        "ALREADY_DELETED_7"
+        "ALREADY_DELETED_7",
+        "UPLOADFAILED_8"
       ]
     },
     {
@@ -764,6 +765,13 @@
         {
           "type": "int",
           "name": "ordinal"
+        },
+        {
+          "type": [
+            null,
+            "MakePreviewRes"
+          ],
+          "name": "preview"
         }
       ]
     },
@@ -2210,29 +2218,49 @@
     },
     {
       "type": "record",
-      "name": "LocalSource",
+      "name": "PostFileAttachmentArg",
       "fields": [
         {
-          "type": "keybase1.Stream",
-          "name": "source"
+          "type": "ConversationID",
+          "name": "conversationID"
+        },
+        {
+          "type": "string",
+          "name": "tlfName"
+        },
+        {
+          "type": "keybase1.TLFVisibility",
+          "name": "visibility"
         },
         {
           "type": "string",
           "name": "filename"
         },
         {
-          "type": "int",
-          "name": "size"
-        }
-      ]
-    },
-    {
-      "type": "record",
-      "name": "LocalFileSource",
-      "fields": [
-        {
           "type": "string",
-          "name": "filename"
+          "name": "title"
+        },
+        {
+          "type": "bytes",
+          "name": "metadata"
+        },
+        {
+          "type": "keybase1.TLFIdentifyBehavior",
+          "name": "identifyBehavior"
+        },
+        {
+          "type": [
+            null,
+            "OutboxID"
+          ],
+          "name": "outboxID"
+        },
+        {
+          "type": [
+            null,
+            "gregor1.DurationSec"
+          ],
+          "name": "ephemeralLifetime"
         }
       ]
     },
@@ -3189,64 +3217,6 @@
       "response": "GetMessagesLocalRes",
       "lint": "ignore"
     },
-    "postAttachmentLocal": {
-      "request": [
-        {
-          "name": "sessionID",
-          "type": "int"
-        },
-        {
-          "name": "conversationID",
-          "type": "ConversationID"
-        },
-        {
-          "name": "tlfName",
-          "type": "string"
-        },
-        {
-          "name": "visibility",
-          "type": "keybase1.TLFVisibility"
-        },
-        {
-          "name": "attachment",
-          "type": "LocalSource"
-        },
-        {
-          "name": "preview",
-          "type": [
-            null,
-            "MakePreviewRes"
-          ]
-        },
-        {
-          "name": "title",
-          "type": "string"
-        },
-        {
-          "name": "metadata",
-          "type": "bytes"
-        },
-        {
-          "name": "identifyBehavior",
-          "type": "keybase1.TLFIdentifyBehavior"
-        },
-        {
-          "name": "outboxID",
-          "type": [
-            null,
-            "OutboxID"
-          ]
-        },
-        {
-          "name": "ephemeralLifetime",
-          "type": [
-            null,
-            "gregor1.DurationSec"
-          ]
-        }
-      ],
-      "response": "PostLocalRes"
-    },
     "postFileAttachmentLocal": {
       "request": [
         {
@@ -3254,56 +3224,28 @@
           "type": "int"
         },
         {
-          "name": "conversationID",
-          "type": "ConversationID"
-        },
-        {
-          "name": "tlfName",
-          "type": "string"
-        },
-        {
-          "name": "visibility",
-          "type": "keybase1.TLFVisibility"
-        },
-        {
-          "name": "attachment",
-          "type": "LocalFileSource"
-        },
-        {
-          "name": "preview",
-          "type": [
-            null,
-            "MakePreviewRes"
-          ]
-        },
-        {
-          "name": "title",
-          "type": "string"
-        },
-        {
-          "name": "metadata",
-          "type": "bytes"
-        },
-        {
-          "name": "identifyBehavior",
-          "type": "keybase1.TLFIdentifyBehavior"
-        },
-        {
-          "name": "outboxID",
-          "type": [
-            null,
-            "OutboxID"
-          ]
-        },
-        {
-          "name": "ephemeralLifetime",
-          "type": [
-            null,
-            "gregor1.DurationSec"
-          ]
+          "name": "arg",
+          "type": "PostFileAttachmentArg"
         }
       ],
       "response": "PostLocalRes"
+    },
+    "postFileAttachmentLocalNonblock": {
+      "request": [
+        {
+          "name": "sessionID",
+          "type": "int"
+        },
+        {
+          "name": "arg",
+          "type": "PostFileAttachmentArg"
+        },
+        {
+          "name": "clientPrev",
+          "type": "MessageID"
+        }
+      ],
+      "response": "PostLocalNonblockRes"
     },
     "DownloadAttachmentLocal": {
       "request": [
@@ -3372,8 +3314,8 @@
           "type": "int"
         },
         {
-          "name": "attachment",
-          "type": "LocalFileSource"
+          "name": "filename",
+          "type": "string"
         },
         {
           "name": "outboxID",
