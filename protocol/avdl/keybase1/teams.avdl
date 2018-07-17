@@ -877,4 +877,5 @@ protocol teams {
    */
   ProfileTeamLoadRes profileTeamLoad(LoadTeamArg arg);
 
+  TeamID getTeamIDByName(string teamName);
 }

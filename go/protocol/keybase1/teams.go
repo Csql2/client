@@ -2384,6 +2384,10 @@ type ProfileTeamLoadArg struct {
 	Arg LoadTeamArg `codec:"arg" json:"arg"`
 }
 
+type GetTeamIDByNameArg struct {
+	TeamName string `codec:"teamName" json:"teamName"`
+}
+
 type TeamsInterface interface {
 	TeamCreate(context.Context, TeamCreateArg) (TeamCreateResult, error)
 	TeamCreateWithSettings(context.Context, TeamCreateWithSettingsArg) (TeamCreateResult, error)
@@ -2442,6 +2446,7 @@ type TeamsInterface interface {
 	// ProfileTeamLoad loads a team and then throws it on the ground, for the purposes of profiling
 	// the team load machinery.
 	ProfileTeamLoad(context.Context, LoadTeamArg) (ProfileTeamLoadRes, error)
+	GetTeamIDByName(context.Context, string) (TeamID, error)
 }
 
 func TeamsProtocol(i TeamsInterface) rpc.Protocol {
@@ -3168,6 +3173,22 @@ func TeamsProtocol(i TeamsInterface) rpc.Protocol {
 				},
 				MethodType: rpc.MethodCall,
 			},
+			"getTeamIDByName": {
+				MakeArg: func() interface{} {
+					ret := make([]GetTeamIDByNameArg, 1)
+					return &ret
+				},
+				Handler: func(ctx context.Context, args interface{}) (ret interface{}, err error) {
+					typedArgs, ok := args.(*[]GetTeamIDByNameArg)
+					if !ok {
+						err = rpc.NewTypeError((*[]GetTeamIDByNameArg)(nil), args)
+						return
+					}
+					ret, err = i.GetTeamIDByName(ctx, (*typedArgs)[0].TeamName)
+					return
+				},
+				MethodType: rpc.MethodCall,
+			},
 		},
 	}
 }
@@ -3418,5 +3439,11 @@ func (c TeamsClient) FindNextMerkleRootAfterTeamRemovalBySigningKey(ctx context.
 func (c TeamsClient) ProfileTeamLoad(ctx context.Context, arg LoadTeamArg) (res ProfileTeamLoadRes, err error) {
 	__arg := ProfileTeamLoadArg{Arg: arg}
 	err = c.Cli.Call(ctx, "keybase.1.teams.profileTeamLoad", []interface{}{__arg}, &res)
+	return
+}
+
+func (c TeamsClient) GetTeamIDByName(ctx context.Context, teamName string) (res TeamID, err error) {
+	__arg := GetTeamIDByNameArg{TeamName: teamName}
+	err = c.Cli.Call(ctx, "keybase.1.teams.getTeamIDByName", []interface{}{__arg}, &res)
 	return
 }

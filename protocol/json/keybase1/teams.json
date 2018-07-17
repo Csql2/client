@@ -2660,6 +2660,15 @@
       ],
       "response": "ProfileTeamLoadRes",
       "doc": "ProfileTeamLoad loads a team and then throws it on the ground, for the purposes of profiling\n   the team load machinery."
+    },
+    "getTeamIDByName": {
+      "request": [
+        {
+          "name": "teamName",
+          "type": "string"
+        }
+      ],
+      "response": "TeamID"
     }
   },
   "namespace": "keybase.1"
