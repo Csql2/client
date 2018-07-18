@@ -206,10 +206,7 @@ func TestGetTeamIDByName(t *testing.T) {
 	// Test as unrelated user
 	mctx = libkb.NewMetaContextForTest(*tcs[1])
 	res, err = GetTeamIDByNameRPC(mctx, teamName.String())
-	// No error because root team name -> id is just hashing and it's
-	// not a secret.
-	require.NoError(t, err)
-	require.Equal(t, teamID, res)
+	require.Error(t, err)
 
 	res, err = GetTeamIDByNameRPC(mctx, subteamName.String())
 	require.Error(t, err)
@@ -217,6 +214,10 @@ func TestGetTeamIDByName(t *testing.T) {
 	// Add user 1 as a reader to root team
 	_, err = AddMember(context.Background(), tcs[0].G, teamName.String(), fus[1].Username, keybase1.TeamRole_READER)
 	require.NoError(t, err)
+
+	res, err = GetTeamIDByNameRPC(mctx, teamName.String())
+	require.NoError(t, err)
+	require.Equal(t, teamID, res)
 
 	// Try to get subteam id, should still fail.
 	res, err = GetTeamIDByNameRPC(mctx, subteamName.String())

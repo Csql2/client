@@ -1626,12 +1626,9 @@ func GetTeamIDByNameRPC(mctx libkb.MetaContext, teamName string) (res keybase1.T
 	if err != nil {
 		return "", err
 	}
-
-	id, err := mctx.G().GetTeamLoader().ResolveNameToIDUntrusted(mctx.Ctx(), nameParsed,
-		false /* public */, true /* allowCache */)
+	id, err := ResolveNameToID(mctx.Ctx(), mctx.G(), nameParsed)
 	if err != nil {
 		return "", err
 	}
-
 	return id, nil
 }
